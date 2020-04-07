@@ -1,0 +1,10 @@
+Objective:
+    design a rudimentary assembly language for a fictional CPU
+        load stuff in to ram 
+        add/sub/mul/div
+        render to a 'screen'
+    implement the core instructions of the CPU
+    add 'video' display/vram and associated instructions.
+        video memory will be added to the end of 'real' memory. 
+            idea is to access raw video memory access to render pixel at coord 
+    
