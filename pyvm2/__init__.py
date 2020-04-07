@@ -6,7 +6,7 @@ from .helpers import *
 # from instructions import * 
 
 
-from .PyVMRegisters import PyVMRegisters
+# from .PyVMRegisters import PyVMRegisters
 
 import importlib
 
@@ -30,40 +30,34 @@ class PyVM():
     memory = []
     registers = {}
     
-    print('outer', id(memory)) # see  id(PyVM.memory))
-
-
-    # I don't know how this works just yet... we'll figure it out.; It should be a list of all the supported instructions by the cpu
-
-    # all of the instructions are 2 or less parameters. . 
-
+    
 
  
+    # REMOVE - No londer required; registers are part of the memory dict
+    # register_addresses = {
+    #         # realmem , val
+    #     'PC': 0x0, # program counter; incremented at each instruction.
+    #         # PC gets 2 register (0x0 and 0x1) slots for counting up to 65535
 
-    register_addresses = {
-            # realmem , val
-        'PC': 0x0, # program counter; incremented at each instruction.
-            # PC gets 2 register (0x0 and 0x1) slots for counting up to 65535
+    #     'IP': 0x2, # instruction pointer; where the NEXT instruction is located in memory
 
-        'IP': 0x2, # instruction pointer; where the NEXT instruction is located in memory
+    #         # IP gets two slots (0x2 and 0x3) so it can address up to 65535 addresses in the ram
 
-            # IP gets two slots (0x2 and 0x3) so it can address up to 65535 addresses in the ram
-
-        'LI': 0x4, # last instruction pointer
+    #     'LI': 0x4, # last instruction pointer
         
-        'JF': 0x5, # did the last instruction trigger a jump? 1 if so. 
-        'TF': 0x6, # test flag; the result of CMP instruction is stored here. 
-        'HF': 0x7, # halt flag; stop all processing. set to value > 0
+    #     'JF': 0x5, # did the last instruction trigger a jump? 1 if so. 
+    #     'TF': 0x6, # test flag; the result of CMP instruction is stored here. 
+    #     'HF': 0x7, # halt flag; stop all processing. set to value > 0
 
-        'R1': 0x8, # general purpose
-        'R2': 0x9,
-        'R3': 0xa,
-        'R4': 0xb, # this is the target for the sig 13 function (print to screen)
+    #     'R1': 0x8, # general purpose
+    #     'R2': 0x9,
+    #     'R3': 0xa,
+    #     'R4': 0xb, # this is the target for the sig 13 function (print to screen)
 
-    # bottom 16 units of memory are reserved for registers 
+    # # bottom 16 units of memory are reserved for registers 
 
-    }
-
+    # }
+    # REMOVE - No londer required; registers are part of the memory dict
 
 
     def __init__(self, ram_size=1024, debug=True, speed=1):
@@ -92,6 +86,7 @@ class PyVM():
         #     'hlt': (0x99, self.hlt) 
         # }
 
+        # using the opcodes as the key
         self.instructions = {
             0x01: (self.mov, 'where', 'what'), # instruction name is the key and a tuple of a hanself.dle to the functions and placeholders the parameters they requireself.
             0x02: (self.jmp, 'where'),
@@ -105,7 +100,7 @@ class PyVM():
             0x0a: (self.inc, 'where'),
             0x0b: (self.sig, 'signum'),
             0x0c: (self.lds, 'a_string'),
-            0x99: (self.hlt) 
+            0x99: (self.hlt, '0x00') 
         }
 
 
@@ -165,6 +160,7 @@ class PyVM():
         self.memory[0x13] = 0x0b # sig
         self.memory[0x14] = 0x0c # sig #13 # pulls from R4? or self.memory[0x05]
         self.memory[0x15] = 0x99 # hlt
+        self.memory[0x16] = 0x00 # required nullbyte for hlt
 
     def memory_init(self, ram_size):
         # self.memory = [0 for _ in range(ram_size)]
@@ -191,14 +187,14 @@ class PyVM():
    
     def mov(self, where, what):
         """places the value of what in memory[where]"""
-        if self.debug:
-            print('mov instruction:', where, what)
+        if self.DEBUG:
+            print(f'mov instruction: 0x{where:x} 0x{what:x}')
         
-        self.memory['PC'] += 1
-        self.memory['IP'] += 2
-
+        # self.memory['PC'] += 1
+    
         where = int(where)
         self.memory[where] = int(what)
+        self.memory['IP'] += 3 
 
     # is this required?
     def mov_r1(self, what):
@@ -228,7 +224,7 @@ class PyVM():
         else:
             if self.DEBUG:
                 print("Test Flag is not set so not jumping")
-            self.memory['IP'] += 2
+            self.memory['IP'] += 1
         
 
     def ret(self, where):
@@ -250,6 +246,8 @@ class PyVM():
                 print('cmp: they are not equal')
             self.memory['TF'] = 0
 
+        self.memory['IP'] += 1
+
     def inc(self, where):
         """INCrement the value at where by 1"""
         if self.DEBUG:
@@ -257,12 +255,18 @@ class PyVM():
         
         self.memory[where] += 1
 
+        self.memory['IP'] += 1
+
     def dec(self, where):
         """DECrement the value at where by 1"""
         if self.DEBUG:
             print(f"decrementing {where:0#x}")
         
         self.memory[where] -= 1
+
+        self.memory['IP'] += 1
+        
+        
 
     def mul(self, where, by):
         """multiply the value at where x by and store in where integers only please"""
@@ -273,14 +277,17 @@ class PyVM():
         where = int(where)
 
         self.memory[where] = self.memory[where] * by
+
+        self.memory['IP'] += 2
         
 
     def div(self, where, by):
         """div the value at where / by and store in where ; integers only please"""
         by = int(by)
         where = int(where)
-        
-        self.memory[where] = self.memory[where] // by # integer division
+        # integer division
+        self.memory[where] = self.memory[where] // by 
+        self.memory['IP'] += 2
 
     def sig(self, signum):
         """SIG as in SIGNAL; this is how we signal that an action should occur; such as print to the screen
@@ -300,7 +307,8 @@ class PyVM():
         if signum == 13: # print 
             print('printing something')
             print(self.registers['R4'])
-        pass
+        
+        self.memory['IP'] += 2
 
     def lds(self, where, a_string):
         """put a_string at where followed by a 0x00 byte"""
@@ -312,16 +320,24 @@ class PyVM():
 
         self.memory['IP'] = self.memory['ip'] + len(a_string) + 1 # plus 1 for the null byte at the end of the str 
 
-    def hlt(self):
-        """Halt the VM and stop all processing"""
-        self.memory['HF'] = 0
+    def hlt(self, nullbyte):
+        """Halt the VM and stop all processing
+        hlt requires a nullbyte; should be 0x99 then 0x00 in memory
+
+        this is because of the way the instructions are handled in the self.instructions dict. 
+
+        everything needs at least one parameter.
+        """
+        if self.DEBUG:
+            print("CPU instructed to halt; setting HF to 1")
+        self.memory['HF'] = 1
 
     def dumpmem(self):
         print("dumping allocated memory")
         used_mem = {k:v for (k,v) in self.memory.items() if v != None and not isinstance(k,str)}
 
         for k,v in used_mem.items():
-            print(f"\taddress {k:#0{4}x} : {v}")
+            print(f"\taddress 0x{k:04x} : 0x{v:02x}")
 
 
     def dumpmemrange(self,start=0, end=0):
@@ -330,7 +346,7 @@ class PyVM():
             end = self.RAM_SIZE
  
         for i in range(start, end):
-            print(f"\taddress {i:4x} : {self.memory[i]}")
+            print(f"\taddress 0x{i:4x} : {self.memory[i]}")
 
 
     def dumpreg(self):
@@ -338,7 +354,8 @@ class PyVM():
         regs = {k: v for k, v in self.memory.items() if isinstance(k, str)} # select all of the keys that are strings (not a memory address)
 
         for k,v in regs.items():
-            print('\tregister',k, '=', v)
+            # print('\tregister',k, '=', v)
+            print(f'\tregister {k} = 0x{v:02x}')
 
     def compile(self, assembly_src):
         """this is the thing that makes the stuff"""
@@ -360,6 +377,11 @@ class PyVM():
 
     def run(self, compiled_code):
         """this is the thing that does the stuff"""
+        
+        self.dumpreg()
+        self.dumpmem()
+        print("==================")
+
         # while self.registers.get('HF') == 0 : # see conversion to dictionary
         self.memory['IP'] = 0x10 # memory address 0 is the entrypoint and the location of the next instruction.
 
@@ -373,16 +395,24 @@ class PyVM():
             # get instruction from memory
             print('')
             opcode = self.memory[self.memory['IP']]
-            print(f'{opcode=}')
+            print(f'opcode = 0x{opcode:02x}')
+            op = self.instructions.get(opcode)
+            print("op info", type(op), op)
 
-            how_many_params = len(self.instructions.get(opcode)) - 1
+            how_many_params = len(op) - 1
             
-            cmd_lens = [len(x) - 2 for x in self.instructions.values()]
-            print(cmd_lens)
+            # cmd_lens = [len(x) - 1 for x in self.instructions.values()]
+            # print(cmd_lens)
             
-
+            print(f'{how_many_params=}')
             
             # do the instruction ; make sure 'self' is the first parameter
+
+            params = []
+            for i in range(1,how_many_params+1):
+                params.append(self.memory[self.memory['IP']+ i ] ) 
+
+            self.instructions[opcode][0](*params) # unpack the list as positional args
 
             # self.memory['IP'] += how_many_params # this should 
 
@@ -390,13 +420,13 @@ class PyVM():
                 self.dumpreg()
                 # self.dumpmem()
                 # self.dumpmemrange(start=0, end=255)
-
-
+                input("press enter to continue...")
+                
             ### 
             time.sleep(1 * self.SPEED)
 
 
-        print("CPU Halted")
+        print("CPU Halted successfully")
         if self.DEBUG:
             self.dumpreg()
             self.dumpmem()
