@@ -76,21 +76,37 @@ class PyVM():
         #this needs to be a function. 
         self.memory_init(ram_size)
 
+        # self.instructions = {
+        #     'mov': (0x01, self.mov, 'where', 'what'), # instruction name is the key and a tuple of a hanself.dle to the functions and placeholders the parameters they requireself.
+        #     'jmp': (0x02, self.jmp, 'where'),
+        #     'jif': (0x03, self.jif, 'where'),
+        #     'ret': (0x04, self.ret, 'where'),
+        #     'cmp': (0x05, self.cmp, 'this', 'that'),
+        #     'inc': (0x06, self.inc, 'where'),
+        #     'dec': (0x07, self.dec, 'where'),
+        #     'mul': (0x08, self.mul, 'where', 'by'),
+        #     'div': (0x09, self.div, 'where', 'by'),
+        #     'inc': (0x0a, self.inc, 'where'),
+        #     'sig': (0x0b, self.sig, 'signum'),
+        #     'lds': (0x0c, self.lds, 'a_string'),
+        #     'hlt': (0x99, self.hlt) 
+        # }
+
         self.instructions = {
-        'mov': (0x01, self.mov, 'where', 'what'), # instruction name is the key and a tuple of a hanself.dle to the functions and placeholders the parameters they requireself.
-        'jmp': (0x02, self.jmp, 'where'),
-        'jif': (0x03, self.jif, 'where'),
-        'ret': (0x04, self.ret, 'where'),
-        'cmp': (0x05, self.cmp, 'this', 'that'),
-        'inc': (0x06, self.inc, 'where'),
-        'dec': (0x07, self.dec, 'where'),
-        'mul': (0x08, self.mul, 'where', 'by'),
-        'div': (0x09, self.div, 'where', 'by'),
-        'inc': (0x0a, self.inc, 'where'),
-        'sig': (0x0b, self.sig, 'signum'),
-        'lds': (0x0c, self.lds, 'a_string'),
-        'hlt': (0x99, self.hlt) 
-    }
+            0x01: (self.mov, 'where', 'what'), # instruction name is the key and a tuple of a hanself.dle to the functions and placeholders the parameters they requireself.
+            0x02: (self.jmp, 'where'),
+            0x03: (self.jif, 'where'),
+            0x04: (self.ret, 'where'),
+            0x05: (self.cmp, 'this', 'that'),
+            0x06: (self.inc, 'where'),
+            0x07: (self.dec, 'where'),
+            0x08: (self.mul, 'where', 'by'),
+            0x09: (self.div, 'where', 'by'),
+            0x0a: (self.inc, 'where'),
+            0x0b: (self.sig, 'signum'),
+            0x0c: (self.lds, 'a_string'),
+            0x99: (self.hlt) 
+        }
 
 
         # memory can be a dict; keys just have to be unique. 
@@ -99,8 +115,6 @@ class PyVM():
         # mem['r1'] will get/set that value too. 
 
         # you lose relative indexing and slices. e.g. mem[idx+2]
-
-   
 
         # Special registers are special; They instruct the cpu on what to do or inform it of the result of the last operation
 
@@ -143,9 +157,9 @@ class PyVM():
         # all of the instructions are 2 or less parameters. . 
 
 
-        ### TODO remove this code
+        ### TODO remove this code; preload some assembly for testing
 
-        self.memory[0x10] = 0x00 # mov
+        self.memory[0x10] = 0x01 # mov
         self.memory[0x11] = 0x20 # mem index i32
         self.memory[0x12] = 0x41 # ascii A
         self.memory[0x13] = 0x0b # sig
@@ -180,42 +194,93 @@ class PyVM():
         if self.debug:
             print('mov instruction:', where, what)
         
-        self.registers['PC'] += 1
+        self.memory['PC'] += 1
+        self.memory['IP'] += 2
+
         where = int(where)
         self.memory[where] = int(what)
-        
+
+    # is this required?
+    def mov_r1(self, what):
+        pass
+
+    def mov_r2(self, what):
+        pass
+
+    def mov_r3(self, what):
+        pass
+
+    def mov_r4(self, what):
+        pass        
 
     def jmp(self, where):
         """ sets IP to where"""
-        pass
+        where = int(where)
+        self.memory['IP'] = int(what)
 
     def jif(self, where):
         """jump if TF is 1"""
-        pass
+        if self.memory['TF'] == 1:
+            if self.DEBUG:
+                print('Test Flag is set is jumping')
+            where = int(where)
+            self.memory['IP'] = int(where)
+        else:
+            if self.DEBUG:
+                print("Test Flag is not set so not jumping")
+            self.memory['IP'] += 2
+        
 
     def ret(self, where):
         """set IP to where"""
-        pass
+        if self.DEBUG:
+            print('Test Flag is set is jumping')
+        where = int(where)
+        self.memory['IP'] = int(where)
+    
 
     def cmp(self, this, that):
         """compare this to that; sets TF to 1 if they equal; something else if they aren't """
-        pass
+        if self.memory[this] == self.memory[that]:
+            if self.DEBUG:
+                print(f"cmp: the are equal")
+            self.memory['TF'] = 1
+        else:
+            if self.DEBUG:
+                print('cmp: they are not equal')
+            self.memory['TF'] = 0
 
     def inc(self, where):
         """INCrement the value at where by 1"""
-        pass
+        if self.DEBUG:
+            print(f"incrementing {where:0#x}")
+        
+        self.memory[where] += 1
 
     def dec(self, where):
         """DECrement the value at where by 1"""
-        pass
+        if self.DEBUG:
+            print(f"decrementing {where:0#x}")
+        
+        self.memory[where] -= 1
 
     def mul(self, where, by):
         """multiply the value at where x by and store in where integers only please"""
-        pass
+        if self.DEBUG:
+            print(f"incrementing {where:0#x}")
+        
+        by = int(by)
+        where = int(where)
+
+        self.memory[where] = self.memory[where] * by
+        
 
     def div(self, where, by):
         """div the value at where / by and store in where ; integers only please"""
-        pass
+        by = int(by)
+        where = int(where)
+        
+        self.memory[where] = self.memory[where] // by # integer division
 
     def sig(self, signum):
         """SIG as in SIGNAL; this is how we signal that an action should occur; such as print to the screen
@@ -223,7 +288,6 @@ class PyVM():
 
         13 = print on to screen
 
-        
         # much, much later. 
         26 = open a file? 
         27 = write a byte to a file handle?
@@ -241,7 +305,12 @@ class PyVM():
     def lds(self, where, a_string):
         """put a_string at where followed by a 0x00 byte"""
 
-        pass
+        for char in a_string:
+            self.mov(where, char)
+            where += 1 
+        self.memory[where+1] = 0x00 # null terminated string. 
+
+        self.memory['IP'] = self.memory['ip'] + len(a_string) + 1 # plus 1 for the null byte at the end of the str 
 
     def hlt(self):
         """Halt the VM and stop all processing"""
@@ -300,18 +369,22 @@ class PyVM():
             # self.thaw_registers() # I need a moment of clarity on this... this is too much of a hack... 
 
             self.memory['PC'] += 1
-
+            self.dumpmem()
             # get instruction from memory
             print('')
             opcode = self.memory[self.memory['IP']]
+            print(f'{opcode=}')
+
+            how_many_params = len(self.instructions.get(opcode)) - 1
+            
             cmd_lens = [len(x) - 2 for x in self.instructions.values()]
             print(cmd_lens)
-            print(f'{opcode=}')
+            
 
             
             # do the instruction ; make sure 'self' is the first parameter
 
-            self.memory['IP'] += 1
+            # self.memory['IP'] += how_many_params # this should 
 
             if self.DEBUG:
                 self.dumpreg()
