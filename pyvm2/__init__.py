@@ -1,6 +1,9 @@
 from typing import List, Dict
 import time
 
+from colored import fg, bg, attr
+import shlex # https://docs.python.org/3/library/shlex.html
+
 from .helpers import *
 
 # from instructions import * 
@@ -100,11 +103,11 @@ class PyVM():
             0x0a: (self.inc, 'where'),
             0x0b: (self.sig, 'signum'),
             0x0c: (self.lds, 'a_string'),
-            0x11: (self.mov_r1, 'what'),
-            0x12: (self.mov_r2, 'what'),
-            0x13: (self.mov_r3, 'what'),
-            0x14: (self.mov_r4, 'what'),
-            0x99: (self.hlt, '0x00'),
+            0x11: (self.mr1, 'what'),
+            0x12: (self.mr2, 'what'),
+            0x13: (self.mr3, 'what'),
+            0x14: (self.mr4, 'what'),
+            0x99: (self.hlt, 'nullbyte'),
 
         }
 
@@ -157,16 +160,7 @@ class PyVM():
         # all of the instructions are 2 or less parameters. . 
 
 
-        ### TODO remove this code; preload some assembly for testing
 
-        self.memory[0x10] = 0x01 # mov
-        self.memory[0x11] = 0x20 # mem index i32
-        self.memory[0x12] = 0x41 # ascii A
-        self.memory[0x13] = 0x14
-        self.memory[0x13] = 0x0b # sig
-        self.memory[0x14] = 0x0c # sig #13 # pulls from R4? or self.memory[0x05]
-        self.memory[0x15] = 0x99 # hlt
-        self.memory[0x16] = 0x00 # required nullbyte for hlt
 
     def memory_init(self, ram_size):
         # self.memory = [0 for _ in range(ram_size)]
@@ -204,17 +198,22 @@ class PyVM():
         self.memory['IP'] += 3 
 
     # is this required?
-    def mov_r1(self, what):
-        pass
+    def mr1(self, what):
+        self.memory['R1'] = int(what)
+        self.memory['IP'] += 2
 
-    def mov_r2(self, what):
-        pass
+    def mr2(self, what):
+        self.memory['R2'] = int(what)
+        self.memory['IP'] += 2
 
-    def mov_r3(self, what):
-        pass
-
-    def mov_r4(self, what):
-        pass        
+    def mr3(self, what):
+        self.memory['R3'] = int(what)
+        self.memory['IP'] += 2
+        
+    def mr4(self, what):
+        self.memory['R4'] = int(what)
+        self.memory['IP'] += 2
+        
 
     def jmp(self, where):
         """ sets IP to where"""
@@ -301,9 +300,9 @@ class PyVM():
         valid signals
         Register R4 is very important 
 
-        13 = print char at address located in r4 on to screen; putchar
-        14 = print char at address located in r4 on to screen, incrementing address until address contains a null byte; putstring
-        15 = print char at address located in r4 on to screen, decrementing address until address contains a null byte; putstring but reversed
+        0x0d = print char at address located in r4 on to screen; putchar
+        0x0e = print char at address located in r4 on to screen, incrementing address until address contains a null byte; putstring
+        0x0f = print char at address located in r4 on to screen, decrementing address until address contains a null byte; putstring but reversed
 
         # much, much later. 
         26 = open a file? 
@@ -313,15 +312,28 @@ class PyVM():
         91 = write to a socket handle
         92 = read from a socket handle. 
         """
-
-        if signum == 13: # putchar 
+     
+        if signum == 0x0d: # putchar 
             # print('printing something')
             if self.DEBUG:
-                print(f"printing address R4 :{self.memory['R4']:#04x} value: {self.memory[self.memory['R4']]:c}", )
-            print(chr(self.memory[self.memory['R4']]))
-        elif signum == 14:
-
-
+                print(f"printing char at address in R4 :{self.memory['R4']:#04x} value: {self.memory[self.memory['R4']]:c}", )
+            print(f'{fg("green")}{chr(self.memory[self.memory["R4"]])}{attr(0)}', end='')
+        elif signum == 0x0e: # putstring until nullbyte; increasing
+            if self.DEBUG:
+                print(f"printing string starting at address in R4 :{self.memory['R4']:#04x} value: {self.memory[self.memory['R4']]:c}", )
+            target = self.memory['R4']
+            while self.memory[target] != 0x00:
+                print(f'{fg("green")}{chr(self.memory[target])}{attr(0)}', end='')
+                target += 1
+        elif signum == 0x0f: # putstring until nullbyte; decreasing (reversed strings)
+            if self.DEBUG:
+                print(f"printing string ending at address in R4 :{self.memory['R4']:#04x} value: {self.memory[self.memory['R4']]:c}", )
+            target = self.memory['R4']
+            while self.memory[target] != 0x00:
+                print(f'{fg("green")}{chr(self.memory[target])}{attr(0)}', end='')
+                target -= 1
+        else:
+            print('unhandled signum', hex(signum))
 
         self.memory['IP'] += 2
 
@@ -375,30 +387,63 @@ class PyVM():
     def compile(self, assembly_src):
         """this is the thing that makes the stuff"""
         compiled = []
+
+        assembly_src = assembly_src.strip()# remove leading and trailing whitespace
+        if self.DEBUG:
+            print(f'Got src:\n{assembly_src}')
+            print('-----')
+
         #come up with a better tokenizer. 
         for line in assembly_src.split('\n'):
             if self.DEBUG:
-                print('Compiling', line)
+                print('Compiling line:', line)
+            line = line.replace(',','')
 
-            cmds = line.split(' ')
-            for cmd in cmds: 
-                self.intstructions
-            compiled.append()
+            cmds = shlex.split(line)
+            print(f'{cmds=}')
 
-        pass
+            for opcode, obj in self.instructions.items():
+                if obj[0].__name__ == cmds[0]:   # search for the name of the function and if it is the same as the line being asked for add opcode. 
+                    compiled.append(opcode)
+                    # if len(cmds) >= 2: # func +  two params
+                    compiled.append(int(cmds[1], 16))
+                    try:
+                        if cmds[2][0] in ['\'', '"']: # beginning of a string
+                            for char in cmds[2][1:-1]:
+                                compiled.append(ord(char))
+                            compiled.append(0x00) # null byte for a string
+                        else:
+                            compiled.append(int(cmds[2], 16))
+                    except IndexError:
+                        if self.DEBUG:
+                            print('index error looking for cmd[2][0] in ', cmds)
+                    break # no need to continue this loop
+                        
+                    
+
+            if self.DEBUG:
+                print([hex(x) for x in compiled])
+                print('returning', compiled)
+        
+        return compiled
     
-
-
 
     def run(self, compiled_code):
         """this is the thing that does the stuff"""
         
+        self.memory['IP'] = 0x10 # memory address 0x10 is the entrypoint and the location of the next instruction.
+
+        entrypoint = 0x10
+        for idx, data in enumerate(compiled_code):
+            if self.DEBUG:
+                print(f'loading 0x{data:02x} to memory 0x{entrypoint + idx:04x}')
+            self.memory[entrypoint + idx] = data
+
         self.dumpreg()
         self.dumpmem()
         print("==================")
 
-        # while self.registers.get('HF') == 0 : # see conversion to dictionary
-        self.memory['IP'] = 0x10 # memory address 0 is the entrypoint and the location of the next instruction.
+        
 
         while self.memory.get('HF') == 0 :
             
@@ -406,13 +451,19 @@ class PyVM():
             # self.thaw_registers() # I need a moment of clarity on this... this is too much of a hack... 
 
             self.memory['PC'] += 1
-            self.dumpmem()
+            # self.dumpmem()
             # get instruction from memory
             print('')
             opcode = self.memory[self.memory['IP']]
-            print(f'opcode = 0x{opcode:02x}')
+            
             op = self.instructions.get(opcode)
-            print("op info", type(op), op)
+            if self.DEBUG:
+                print(f'opcode = 0x{opcode:02x}')
+                print("op info:", op, type(op))
+
+            if opcode == None:
+                self.memory['HF'] = 1
+                print('CRITICAL ERROR: Invalid opcode: None'   )
 
             how_many_params = len(op) - 1
             
@@ -427,18 +478,22 @@ class PyVM():
             for i in range(1,how_many_params+1):
                 params.append(self.memory[self.memory['IP']+ i ] ) 
 
+            if self.DEBUG:
+                print(f'calling {op} with params {[hex(x) for x in params]}')
+
             self.instructions[opcode][0](*params) # unpack the list as positional args
 
             # self.memory['IP'] += how_many_params # this should 
 
             if self.DEBUG:
-                self.dumpreg()
+                # self.dumpreg()
                 # self.dumpmem()
                 # self.dumpmemrange(start=0, end=255)
-                input("press enter to continue...")
+                # input("press enter to continue...")
+                pass
                 
             ### 
-            time.sleep(1 * self.SPEED)
+            # time.sleep(1 * self.SPEED)
 
 
         print("CPU Halted successfully")
