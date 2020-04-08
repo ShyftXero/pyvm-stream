@@ -100,7 +100,12 @@ class PyVM():
             0x0a: (self.inc, 'where'),
             0x0b: (self.sig, 'signum'),
             0x0c: (self.lds, 'a_string'),
-            0x99: (self.hlt, '0x00') 
+            0x11: (self.mov_r1, 'what'),
+            0x12: (self.mov_r2, 'what'),
+            0x13: (self.mov_r3, 'what'),
+            0x14: (self.mov_r4, 'what'),
+            0x99: (self.hlt, '0x00'),
+
         }
 
 
@@ -157,6 +162,7 @@ class PyVM():
         self.memory[0x10] = 0x01 # mov
         self.memory[0x11] = 0x20 # mem index i32
         self.memory[0x12] = 0x41 # ascii A
+        self.memory[0x13] = 0x14
         self.memory[0x13] = 0x0b # sig
         self.memory[0x14] = 0x0c # sig #13 # pulls from R4? or self.memory[0x05]
         self.memory[0x15] = 0x99 # hlt
@@ -188,9 +194,10 @@ class PyVM():
     def mov(self, where, what):
         """places the value of what in memory[where]"""
         if self.DEBUG:
-            print(f'mov instruction: 0x{where:x} 0x{what:x}')
+            print(f'mov instruction: 0x{where:04x} 0x{what:02x}')
         
         # self.memory['PC'] += 1
+        
     
         where = int(where)
         self.memory[where] = int(what)
@@ -292,8 +299,11 @@ class PyVM():
     def sig(self, signum):
         """SIG as in SIGNAL; this is how we signal that an action should occur; such as print to the screen
         valid signals
+        Register R4 is very important 
 
-        13 = print on to screen
+        13 = print char at address located in r4 on to screen; putchar
+        14 = print char at address located in r4 on to screen, incrementing address until address contains a null byte; putstring
+        15 = print char at address located in r4 on to screen, decrementing address until address contains a null byte; putstring but reversed
 
         # much, much later. 
         26 = open a file? 
@@ -304,10 +314,15 @@ class PyVM():
         92 = read from a socket handle. 
         """
 
-        if signum == 13: # print 
-            print('printing something')
-            print(self.registers['R4'])
-        
+        if signum == 13: # putchar 
+            # print('printing something')
+            if self.DEBUG:
+                print(f"printing address R4 :{self.memory['R4']:#04x} value: {self.memory[self.memory['R4']]:c}", )
+            print(chr(self.memory[self.memory['R4']]))
+        elif signum == 14:
+
+
+
         self.memory['IP'] += 2
 
     def lds(self, where, a_string):
@@ -403,8 +418,8 @@ class PyVM():
             
             # cmd_lens = [len(x) - 1 for x in self.instructions.values()]
             # print(cmd_lens)
-            
-            print(f'{how_many_params=}')
+            if self.DEBUG:
+                print(f'requires {how_many_params=}')
             
             # do the instruction ; make sure 'self' is the first parameter
 
