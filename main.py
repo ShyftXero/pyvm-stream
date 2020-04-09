@@ -1,7 +1,7 @@
 import pyvm2
 
-# vm = pyvm2.PyVM(ram_size=2048, debug=False)
-vm = pyvm2.PyVM(ram_size=2048)
+vm = pyvm2.PyVM(ram_size=2048, debug=False)
+# vm = pyvm2.PyVM(ram_size=2048)
 
 some_assy = """
 mr1 0xa
@@ -39,7 +39,7 @@ some_assy = """
 ; this is a continuous loop printing A
 mov 0xa 0xa
 mov 0x20 0x41 
-mr4 0x20
+mov 0xd 0x20
 sig 0x0d
 jmp 0x10
 hlt

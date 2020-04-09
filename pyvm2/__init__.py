@@ -88,15 +88,15 @@ class PyVM():
             0x0a: (self.inc, 'where'),
             0x0b: (self.sig, 'signum'),
             0x0c: (self.lds, 'a_string'),
-            0x11: (self.mr1, 'what'),
-            0x12: (self.mr2, 'what'),
-            0x13: (self.mr3, 'what'),
-            0x14: (self.mr4, 'what'),
-            0x21: (self.cr1, 'what'),
-            0x22: (self.cr2, 'what'),
-            0x23: (self.cr3, 'what'),
-            0x24: (self.cr4, 'what'),
-            0x31: (self.ir1, 'by'),
+            # 0x11: (self.mr1, 'what'),
+            # 0x12: (self.mr2, 'what'),
+            # 0x13: (self.mr3, 'what'),
+            # 0x14: (self.mr4, 'what'),
+            # 0x21: (self.cr1, 'what'),
+            # 0x22: (self.cr2, 'what'),
+            # 0x23: (self.cr3, 'what'),
+            # 0x24: (self.cr4, 'what'),
+            # 0x31: (self.ir1, 'by'),
             0x99: (self.hlt, 'nullbyte'),
 
         }
@@ -293,11 +293,11 @@ class PyVM():
     def sig(self, signum):
         """SIG as in SIGNAL; this is how we signal that an action should occur; such as print to the screen
         valid signals
-        Register R4 is very important 
+        Register memory 0xd is very important 
 
-        0x0d = print char at address located in r4 on to screen; putchar
-        0x0e = print char at address located in r4 on to screen, incrementing address until address contains a null byte; putstring
-        0x0f = print char at address located in r4 on to screen, decrementing address until address contains a null byte; putstring but reversed
+        0x0d = print char at address located in register D on to screen; putchar
+        0x0e = print char at address located in register D on to screen, incrementing address until address contains a null byte; putstring
+        0x0f = print char at address located in register D on to screen, decrementing address until address contains a null byte; putstring but reversed
 
         # much, much later. 
         26 = open a file? 
@@ -311,19 +311,21 @@ class PyVM():
         if signum == 0x0d: # putchar 
             # print('printing something')
             if self.DEBUG:
-                print(f"printing char at address in R4 :{self.memory['R4']:#04x} value: {self.memory[self.memory['R4']]:c}", )
-            print(f'{fg("green")}{chr(self.memory[self.memory["R4"]])}{attr("reset")}', end='')
+                print(f"printing char at address in memory 0xd :{self.memory[0xd]:#04x} value: {self.memory[self.memory[0xd]]:c}", )
+            print(f'{fg("green")}{chr(self.memory[self.memory[0xd]])}{attr("reset")}', end='')
+            with open('test_pipe', 'w') as SCREEN:
+                SCREEN.write(f'{fg("green")}{chr(self.memory[self.memory[0xd]])}{attr("reset")}')
         elif signum == 0x0e: # putstring until nullbyte; increasing
             if self.DEBUG:
-                print(f"printing string starting at address in R4 :{self.memory['R4']:#04x} value: {self.memory[self.memory['R4']]:c}", )
-            target = self.memory['R4']
+                print(f"printing string starting at address in memory 0xd :{self.memory[0xd]:#04x} value: {self.memory[self.memory[0xd]]:c}", )
+            target = self.memory[0xd]
             while self.memory[target] != 0x00:
                 print(f'{fg("green")}{chr(self.memory[target])}{attr("reset")}', end='')
                 target += 1
         elif signum == 0x0f: # putstring until nullbyte; decreasing (reversed strings)
             if self.DEBUG:
-                print(f"printing string ending at address in R4 :{self.memory['R4']:#04x} value: {self.memory[self.memory['R4']]:c}", )
-            target = self.memory['R4']
+                print(f"printing string ending at address in memory 0xd:{self.memory[0xd]:#04x} value: {self.memory[self.memory[0xd]]:c}", )
+            target = self.memory[0xd]
             while self.memory[target] != 0x00:
                 print(f'{fg("green")}{chr(self.memory[target])}{attr("reset")}', end='')
                 target -= 1
@@ -407,50 +409,63 @@ class PyVM():
             # TODO this huge if block might be the result of that moment of clarity referenced below. 
 
             if line[0].lower() == 'mov':
-                if 'r' in line[1].lower():
-                    #dealing with a register
-                    # leverage mr1-4 functions
-                    if line[1].lower() == 'r1':
-                        compiled.append(0x11)
-                    elif line[1].lower() == 'r2':
-                        compiled.append(0x12)
-                    elif line[1].lower() == 'r3':
-                        compiled.append(0x13)
-                    elif line[1].lower() == 'r4':
-                        compiled.append(0x14)
-                    # finally add what the register should be 
-                    compiled.append(line[2])
-                else:
-                    #not a register so use the default mov func
-                    compiled.append(int(line[1], 16))
-                    compiled.append(int(line[2], 16))
+                compiled.append(0x01)
+                compiled.append(int(line[1], 16))
+                compiled.append(int(line[2], 16))
 
                 # assemble the rest of the code
             elif line[0].lower() == 'jmp':
-                pass
+                compiled.append(0x02)
+                compiled.append(int(line[1], 16))
+           
             elif line[0].lower() == 'jif':
-                pass
+                compiled.append(0x03)
+                compiled.append(int(line[1], 16))
+            
             elif line[0].lower() == 'ret':
-                pass
+                compiled.append(0x04)
+                compiled.append(int(line[1], 16))
+           
             elif line[0].lower() == 'cmp':
-                pass
+                compiled.append(0x05)
+                compiled.append(int(line[1], 16))
+                compiled.append(int(line[2], 16))
+           
             elif line[0].lower() == 'inc':
-                pass
+                compiled.append(0x06)
+                compiled.append(int(line[1], 16))
+                compiled.append(int(line[2], 16))
+           
             elif line[0].lower() == 'dec':
-                pass
+                compiled.append(0x07)
+                compiled.append(int(line[1], 16))
+                compiled.append(int(line[2], 16))
+           
             elif line[0].lower() == 'mul':
-                pass
+                compiled.append(0x08)
+                compiled.append(int(line[1], 16))
+                compiled.append(int(line[2], 16))
+            
             elif line[0].lower() == 'div':
+                compiled.append(0x09)
+                compiled.append(int(line[1], 16))
+                compiled.append(int(line[2], 16))
+           
+            elif line[0].lower() == 'ldd':
+                # like lds but for raw bytes
                 pass
             elif line[0].lower() == 'sig':
-                pass
+                compiled.append(0x0b)
+                compiled.append(int(line[1], 16))
+
             elif line[0].lower() == 'lds':
                 pass
+           
             elif line[0].lower() == 'hlt':
                 # the developer may not have to add the null byte to the end in their sourcecode, because the compiler can add it here. 
                 compiled.append(0x99)
                 compiled.append(0x00)
-                pass
+            
             elif line[0].lower() == 'another_instruction':
                 # some new feature
                 pass
@@ -502,13 +517,15 @@ class PyVM():
     def run(self, compiled_code):
         """this is the thing that does the stuff"""
         
-        self.memory['IP'] = 0x10 # memory address 0x10 is the entrypoint and the location of the next instruction.
+        ENTRYPOINT = 0x20
 
-        entrypoint = 0x10
+        self.memory['IP'] = ENTRYPOINT # memory address 0x10 is the entrypoint and the location of the next instruction.
+
+        
         for idx, data in enumerate(compiled_code):
             if self.DEBUG:
-                print(f'loading 0x{data:02x} to memory 0x{entrypoint + idx:04x}')
-            self.memory[entrypoint + idx] = data
+                print(f'loading 0x{data:02x} to memory 0x{ENTRYPOINT + idx:04x}')
+            self.memory[ENTRYPOINT + idx] = data
 
         self.dumpreg()
         self.dumpmem()
@@ -527,7 +544,7 @@ class PyVM():
             print('')
             opcode = self.memory[self.memory['IP']]
             
-            op = self.instructions.get(opcode)
+            op = self.instructions[opcode]
             if self.DEBUG:
                 print(f'opcode = 0x{opcode:02x}')
                 print("op info:", op, type(op))
