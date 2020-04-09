@@ -29,6 +29,7 @@ class PyVM():
     # this should bring all of the cpu instructions into the PyVM class namespace. right? I should have to preface all of the function calls with 'self.'
 
     DEBUG = True
+    DEBUG_LEVEL = 0 
     SPEED = 1
     memory = []
     registers = {}
@@ -180,30 +181,9 @@ class PyVM():
         if self.DEBUG:
             print(f'mov instruction: 0x{where:04x} 0x{what:02x}')
         
-        # self.memory['PC'] += 1
-        
-    
         where = int(where)
         self.memory[where] = int(what)
         self.memory['IP'] += 3 
-
-    # is this required?
-    def mr1(self, what):
-        self.memory['R1'] = int(what)
-        self.memory['IP'] += 2
-
-    def mr2(self, what):
-        self.memory['R2'] = int(what)
-        self.memory['IP'] += 2
-
-    def mr3(self, what):
-        self.memory['R3'] = int(what)
-        self.memory['IP'] += 2
-        
-    def mr4(self, what):
-        self.memory['R4'] = int(what)
-        self.memory['IP'] += 2
-        
 
     def jmp(self, where):
         """ sets IP to where"""
@@ -313,8 +293,8 @@ class PyVM():
             if self.DEBUG:
                 print(f"printing char at address in memory 0xd :{self.memory[0xd]:#04x} value: {self.memory[self.memory[0xd]]:c}", )
             print(f'{fg("green")}{chr(self.memory[self.memory[0xd]])}{attr("reset")}', end='')
-            with open('test_pipe', 'w') as SCREEN:
-                SCREEN.write(f'{fg("green")}{chr(self.memory[self.memory[0xd]])}{attr("reset")}')
+            # with open('test_pipe', 'w') as SCREEN:
+            #     SCREEN.write(f'{fg("green")}{chr(self.memory[self.memory[0xd]])}{attr("reset")}')
         elif signum == 0x0e: # putstring until nullbyte; increasing
             if self.DEBUG:
                 print(f"printing string starting at address in memory 0xd :{self.memory[0xd]:#04x} value: {self.memory[self.memory[0xd]]:c}", )
@@ -381,6 +361,13 @@ class PyVM():
             # print('\tregister',k, '=', v)
             print(f'\tregister {k} = 0x{v:02x}')
 
+    def fetch_debug_level(self):
+        try:
+            dbg_level = int(open('debug_level').read())
+            return dbg_level # 0 or higher
+        except FileNotFoundError:
+            return 1 #no extra debugging
+
     def assemble(self, assembly_src):
         """this is the thing that makes the stuff"""
         compiled = []
@@ -408,65 +395,79 @@ class PyVM():
 
             # TODO this huge if block might be the result of that moment of clarity referenced below. 
 
-            if line[0].lower() == 'mov':
+            try:
+                cmd = line[0].lower()
+                param_1 = int(line[1], 16)
+                param_2 = int(line[2], 16)
+            except IndexError as e:
+                print("index error: there probably isn't a second paramer")
+                print(e)
+            except BaseException as e:
+                print(e)
+                
+            if cmd == 'mov':
                 compiled.append(0x01)
-                compiled.append(int(line[1], 16))
-                compiled.append(int(line[2], 16))
+                if self.is_register(param_1): # leave registers unmapped
+                    compiled.append(param_1)
+                else: # remap nonregister addresses
+                    compiled.append(self.mem_map(param_1))
+                
+                compiled.append(param_2)
 
                 # assemble the rest of the code
-            elif line[0].lower() == 'jmp':
+            elif cmd == 'jmp':
                 compiled.append(0x02)
-                compiled.append(int(line[1], 16))
+                compiled.append(param_1)
            
-            elif line[0].lower() == 'jif':
+            elif cmd == 'jif':
                 compiled.append(0x03)
-                compiled.append(int(line[1], 16))
+                compiled.append(param_1)
             
-            elif line[0].lower() == 'ret':
+            elif cmd == 'ret':
                 compiled.append(0x04)
-                compiled.append(int(line[1], 16))
+                compiled.append(param_1)
            
-            elif line[0].lower() == 'cmp':
+            elif cmd == 'cmp':
                 compiled.append(0x05)
-                compiled.append(int(line[1], 16))
-                compiled.append(int(line[2], 16))
+                compiled.append(param_1)
+                compiled.append(param_2)
            
-            elif line[0].lower() == 'inc':
+            elif cmd == 'inc':
                 compiled.append(0x06)
-                compiled.append(int(line[1], 16))
-                compiled.append(int(line[2], 16))
+                compiled.append(param_1)
+                compiled.append(param_2)
            
-            elif line[0].lower() == 'dec':
+            elif cmd == 'dec':
                 compiled.append(0x07)
-                compiled.append(int(line[1], 16))
-                compiled.append(int(line[2], 16))
+                compiled.append(param_1)
+                compiled.append(param_2)
            
-            elif line[0].lower() == 'mul':
+            elif cmd == 'mul':
                 compiled.append(0x08)
-                compiled.append(int(line[1], 16))
-                compiled.append(int(line[2], 16))
+                compiled.append(param_1)
+                compiled.append(param_2)
             
-            elif line[0].lower() == 'div':
+            elif cmd == 'div':
                 compiled.append(0x09)
-                compiled.append(int(line[1], 16))
-                compiled.append(int(line[2], 16))
+                compiled.append(param_1)
+                compiled.append(param_2)
            
-            elif line[0].lower() == 'ldd':
+            elif cmd == 'ldd':
                 # like lds but for raw bytes
                 pass
-            elif line[0].lower() == 'sig':
+            elif cmd == 'sig':
                 compiled.append(0x0b)
-                compiled.append(int(line[1], 16))
+                compiled.append(param_1)
 
-            elif line[0].lower() == 'lds':
+            elif cmd == 'lds':
                 pass
            
-            elif line[0].lower() == 'hlt':
+            elif cmd == 'hlt':
                 # the developer may not have to add the null byte to the end in their sourcecode, because the compiler can add it here. 
                 compiled.append(0x99)
                 compiled.append(0x00)
             
-            elif line[0].lower() == 'another_instruction':
+            elif cmd == 'another_instruction':
                 # some new feature
                 pass
             else:
@@ -474,66 +475,53 @@ class PyVM():
                 exit()
 
 
-            # # TODO I NEED A MOMENT OF CLARITY TO RESOLVE THIS ISSUE IN A MORE ELAGANT FASION... 
-
-            # ###
-
-            # for opcode, obj in self.instructions.items():
-            #     if obj[0].__name__ == cmds[0]:   # search for the name of the function and if it is the same as the line being asked for add opcode. 
-            #         compiled.append(opcode) # once found, add it
-            #         # if len(cmds) >= 2: # func +  two params
-            #         if 'R' in cmds[1].upper():    # dealing with a register?
-            #             for k,v in self.register_addresses.items():
-            #                 if cmds[1].upper() == k:
-            #                     # not all register commands have two params... 
-            #                     compiled.append(int(v, 16))
-            #                     break
-                            
-            #         else:
-            #             compiled.append(int(cmds[1], 16))
-                    
-            #         try:
-            #             if cmds[2][0] in ['\'', '"']: # beginning of a string
-            #                 for char in cmds[2][1:-1]:
-            #                     compiled.append(ord(char))
-            #                 compiled.append(0x00) # null byte for a string
-            #             else:
-            #                 compiled.append(int(cmds[2], 16))
-            #         except IndexError:
-            #             if self.DEBUG:
-            #                 print('index error looking for cmd[2][0] in ', cmds)
-            #         break # no need to continue this loop
-                        
-            # ###
-            # #      
-
             if self.DEBUG:
                 print([f'0x{x:02x}' for x in compiled])
                 print('returning', compiled)
         
         return compiled
-    
+
+    def mem_map(self, requested_address, base_address=0x1000):
+        return base_address + requested_address     
+
+    def is_register(self, value):
+        if value in [0xa, 0xb, 0xc, 0xd]:
+            return True
+        return False
 
     def run(self, compiled_code):
         """this is the thing that does the stuff"""
         
-        ENTRYPOINT = 0x20
+        #PROGRAMMER MEMORY VS CODE SPACE... 
+
+        # THERE IS A COLLISION WHERE I WILL OVERWRITE MY OWN INSTRUCTIONS IN MEMORY... 
+
+        # I NEED A BASE_ADDRESS TO START LOADING CODE.
+
+        
+
+        # we need a way to translate the requested memory address to a mapped memory address... unless it's a register, then leave it unmodified. 
+
+        # THIS PROBLEM NEEDS TO BE RESOLVED IN THE COMPILER. 
+
+        ENTRYPOINT = 0x10
 
         self.memory['IP'] = ENTRYPOINT # memory address 0x10 is the entrypoint and the location of the next instruction.
-
         
         for idx, data in enumerate(compiled_code):
             if self.DEBUG:
                 print(f'loading 0x{data:02x} to memory 0x{ENTRYPOINT + idx:04x}')
             self.memory[ENTRYPOINT + idx] = data
-
-        self.dumpreg()
-        self.dumpmem()
-        print("==================")
+        
+        if self.DEBUG:
+            self.dumpreg()
+            self.dumpmem()
+            print("==================")
 
         
 
         while self.memory.get('HF') == 0 :
+            self.DEBUG_LEVEL = self.fetch_debug_level()
             
             ### TODO fix this idea. there is a better way. 
             # self.thaw_registers() # I need a moment of clarity on this... this is too much of a hack... 
@@ -541,13 +529,20 @@ class PyVM():
             self.memory['PC'] += 1
             # self.dumpmem()
             # get instruction from memory
-            print('')
+            # print('')
             opcode = self.memory[self.memory['IP']]
             
-            op = self.instructions[opcode]
+            try:
+                op = self.instructions[opcode]
+            except KeyError:
+                self.dumpmem()
+                self.dumpreg()
+                print('illegal operation: IP set to invalid instruction')
+                exit()
             if self.DEBUG:
+                self.dumpmem()
                 print(f'opcode = 0x{opcode:02x}')
-                print("op info:", op, type(op))
+                # print("op info:", op, type(op))
 
             if opcode == None:
                 self.memory['HF'] = 1
@@ -564,7 +559,7 @@ class PyVM():
 
             params = []
             for i in range(1,how_many_params+1):
-                params.append(self.memory[self.memory['IP']+ i ] ) 
+                params.append(self.memory[self.memory['IP'] + i ] ) 
 
             if self.DEBUG:
                 print(f'calling {op} with params {[hex(x) for x in params]}')
@@ -577,8 +572,9 @@ class PyVM():
                 # self.dumpreg()
                 # self.dumpmem()
                 # self.dumpmemrange(start=0, end=255)
-                # input("press enter to continue...")
-                pass
+                if self.DEBUG_LEVEL == 1:
+                    input("press enter to continue...")
+                
                 
             ### 
             # time.sleep(1 * self.SPEED)
