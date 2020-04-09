@@ -36,27 +36,27 @@ class PyVM():
     
 
  
-    # REMOVE - No londer required; registers are part of the memory dict
-    # register_addresses = {
-    #         # realmem , val
-    #     'PC': 0x0, # program counter; incremented at each instruction.
-    #         # PC gets 2 register (0x0 and 0x1) slots for counting up to 65535
+    # REMOVE - No londer required; registers are part of the memory dict; not true... for compiling I need to be able to assign a predictable spot
+    register_addresses = {
+            # realmem , val
+        'PC': 0x0, # program counter; incremented at each instruction.
+            # PC gets 2 register (0x0 and 0x1) slots for counting up to 65535
 
-    #     'IP': 0x2, # instruction pointer; where the NEXT instruction is located in memory
+        'IP': 0x2, # instruction pointer; where the NEXT instruction is located in memory
 
-    #         # IP gets two slots (0x2 and 0x3) so it can address up to 65535 addresses in the ram
+            # IP gets two slots (0x2 and 0x3) so it can address up to 65535 addresses in the ram
 
-    #     'LI': 0x4, # last instruction pointer
+        'LI': 0x4, # last instruction pointer
         
-    #     'JF': 0x5, # did the last instruction trigger a jump? 1 if so. 
-    #     'TF': 0x6, # test flag; the result of CMP instruction is stored here. 
-    #     'HF': 0x7, # halt flag; stop all processing. set to value > 0
+        'JF': 0x5, # did the last instruction trigger a jump? 1 if so. 
+        'TF': 0x6, # test flag; the result of CMP instruction is stored here. 
+        'HF': 0x7, # halt flag; stop all processing. set to value > 0
 
-    #     'R1': 0x8, # general purpose
-    #     'R2': 0x9,
-    #     'R3': 0xa,
-    #     'R4': 0xb, # this is the target for the sig 13 function (print to screen)
-
+        'RC': 0xa, # general purpose
+        'RB': 0xb,
+        'RC': 0xc,
+        'RD': 0xd, # this is the target for the sig 13 function (print to screen)
+    }
     # # bottom 16 units of memory are reserved for registers 
 
     # }
@@ -73,21 +73,6 @@ class PyVM():
         #this needs to be a function. 
         self.memory_init(ram_size)
 
-        # self.instructions = {
-        #     'mov': (0x01, self.mov, 'where', 'what'), # instruction name is the key and a tuple of a hanself.dle to the functions and placeholders the parameters they requireself.
-        #     'jmp': (0x02, self.jmp, 'where'),
-        #     'jif': (0x03, self.jif, 'where'),
-        #     'ret': (0x04, self.ret, 'where'),
-        #     'cmp': (0x05, self.cmp, 'this', 'that'),
-        #     'inc': (0x06, self.inc, 'where'),
-        #     'dec': (0x07, self.dec, 'where'),
-        #     'mul': (0x08, self.mul, 'where', 'by'),
-        #     'div': (0x09, self.div, 'where', 'by'),
-        #     'inc': (0x0a, self.inc, 'where'),
-        #     'sig': (0x0b, self.sig, 'signum'),
-        #     'lds': (0x0c, self.lds, 'a_string'),
-        #     'hlt': (0x99, self.hlt) 
-        # }
 
         # using the opcodes as the key
         self.instructions = {
@@ -96,8 +81,8 @@ class PyVM():
             0x03: (self.jif, 'where'),
             0x04: (self.ret, 'where'),
             0x05: (self.cmp, 'this', 'that'),
-            0x06: (self.inc, 'where'),
-            0x07: (self.dec, 'where'),
+            0x06: (self.inc, 'where', 'by'),
+            0x07: (self.dec, 'where', 'by '),
             0x08: (self.mul, 'where', 'by'),
             0x09: (self.div, 'where', 'by'),
             0x0a: (self.inc, 'where'),
@@ -107,6 +92,11 @@ class PyVM():
             0x12: (self.mr2, 'what'),
             0x13: (self.mr3, 'what'),
             0x14: (self.mr4, 'what'),
+            0x21: (self.cr1, 'what'),
+            0x22: (self.cr2, 'what'),
+            0x23: (self.cr3, 'what'),
+            0x24: (self.cr4, 'what'),
+            0x31: (self.ir1, 'by'),
             0x99: (self.hlt, 'nullbyte'),
 
         }
@@ -218,7 +208,7 @@ class PyVM():
     def jmp(self, where):
         """ sets IP to where"""
         where = int(where)
-        self.memory['IP'] = int(what)
+        self.memory['IP'] = int(where)
 
     def jif(self, where):
         """jump if TF is 1"""
@@ -254,21 +244,26 @@ class PyVM():
 
         self.memory['IP'] += 1
 
-    def inc(self, where):
-        """INCrement the value at where by 1"""
+    def inc(self, where, by):
+        """INCrement the value at where by somevalue"""
         if self.DEBUG:
-            print(f"incrementing {where:0#x}")
+            print(f"incrementing value at memory 0x{where:04x} by {by}; currently {self.memory[where]}")
         
-        self.memory[where] += 1
+        self.memory[where] += int(by)
+        if self.DEBUG:
+            print(f'value at memory 0x{where:04x} is now {self.memory[where]}')
+
 
         self.memory['IP'] += 1
 
-    def dec(self, where):
-        """DECrement the value at where by 1"""
+    def dec(self, where, by):
+        """DECrement the value at where by some value"""
         if self.DEBUG:
-            print(f"decrementing {where:0#x}")
+            print(f"decrementing value at memory 0x{where:04x} by {by}; currently {self.memory[where]}")
         
-        self.memory[where] -= 1
+        self.memory[where] -= int(by)
+        if self.DEBUG:
+            print(f'value at memory 0x{where:04x} is now {self.memory[where]}')
 
         self.memory['IP'] += 1
         
@@ -317,20 +312,20 @@ class PyVM():
             # print('printing something')
             if self.DEBUG:
                 print(f"printing char at address in R4 :{self.memory['R4']:#04x} value: {self.memory[self.memory['R4']]:c}", )
-            print(f'{fg("green")}{chr(self.memory[self.memory["R4"]])}{attr(0)}', end='')
+            print(f'{fg("green")}{chr(self.memory[self.memory["R4"]])}{attr("reset")}', end='')
         elif signum == 0x0e: # putstring until nullbyte; increasing
             if self.DEBUG:
                 print(f"printing string starting at address in R4 :{self.memory['R4']:#04x} value: {self.memory[self.memory['R4']]:c}", )
             target = self.memory['R4']
             while self.memory[target] != 0x00:
-                print(f'{fg("green")}{chr(self.memory[target])}{attr(0)}', end='')
+                print(f'{fg("green")}{chr(self.memory[target])}{attr("reset")}', end='')
                 target += 1
         elif signum == 0x0f: # putstring until nullbyte; decreasing (reversed strings)
             if self.DEBUG:
                 print(f"printing string ending at address in R4 :{self.memory['R4']:#04x} value: {self.memory[self.memory['R4']]:c}", )
             target = self.memory['R4']
             while self.memory[target] != 0x00:
-                print(f'{fg("green")}{chr(self.memory[target])}{attr(0)}', end='')
+                print(f'{fg("green")}{chr(self.memory[target])}{attr("reset")}', end='')
                 target -= 1
         else:
             print('unhandled signum', hex(signum))
@@ -384,7 +379,7 @@ class PyVM():
             # print('\tregister',k, '=', v)
             print(f'\tregister {k} = 0x{v:02x}')
 
-    def compile(self, assembly_src):
+    def assemble(self, assembly_src):
         """this is the thing that makes the stuff"""
         compiled = []
 
@@ -395,34 +390,110 @@ class PyVM():
 
         #come up with a better tokenizer. 
         for line in assembly_src.split('\n'):
+            if line.startswith(';'):
+                if self.DEBUG:
+                    print('skipping comment: ', line)
+                    
+                continue 
             if self.DEBUG:
                 print('Compiling line:', line)
-            line = line.replace(',','')
+            
 
-            cmds = shlex.split(line)
-            print(f'{cmds=}')
+            line = shlex.split(line)
+            if self.DEBUG:
+                print(f'{line=}')
 
-            for opcode, obj in self.instructions.items():
-                if obj[0].__name__ == cmds[0]:   # search for the name of the function and if it is the same as the line being asked for add opcode. 
-                    compiled.append(opcode)
-                    # if len(cmds) >= 2: # func +  two params
-                    compiled.append(int(cmds[1], 16))
-                    try:
-                        if cmds[2][0] in ['\'', '"']: # beginning of a string
-                            for char in cmds[2][1:-1]:
-                                compiled.append(ord(char))
-                            compiled.append(0x00) # null byte for a string
-                        else:
-                            compiled.append(int(cmds[2], 16))
-                    except IndexError:
-                        if self.DEBUG:
-                            print('index error looking for cmd[2][0] in ', cmds)
-                    break # no need to continue this loop
-                        
+
+            # TODO this huge if block might be the result of that moment of clarity referenced below. 
+
+            if line[0].lower() == 'mov':
+                if 'r' in line[1].lower():
+                    #dealing with a register
+                    # leverage mr1-4 functions
+                    if line[1].lower() == 'r1':
+                        compiled.append(0x11)
+                    elif line[1].lower() == 'r2':
+                        compiled.append(0x12)
+                    elif line[1].lower() == 'r3':
+                        compiled.append(0x13)
+                    elif line[1].lower() == 'r4':
+                        compiled.append(0x14)
+                    # finally add what the register should be 
+                    compiled.append(line[2])
+                else:
+                    #not a register so use the default mov func
+                    compiled.append(int(line[1], 16))
+                    compiled.append(int(line[2], 16))
+
+                # assemble the rest of the code
+            elif line[0].lower() == 'jmp':
+                pass
+            elif line[0].lower() == 'jif':
+                pass
+            elif line[0].lower() == 'ret':
+                pass
+            elif line[0].lower() == 'cmp':
+                pass
+            elif line[0].lower() == 'inc':
+                pass
+            elif line[0].lower() == 'dec':
+                pass
+            elif line[0].lower() == 'mul':
+                pass
+            elif line[0].lower() == 'div':
+                pass
+            elif line[0].lower() == 'sig':
+                pass
+            elif line[0].lower() == 'lds':
+                pass
+            elif line[0].lower() == 'hlt':
+                # the developer may not have to add the null byte to the end in their sourcecode, because the compiler can add it here. 
+                compiled.append(0x99)
+                compiled.append(0x00)
+                pass
+            elif line[0].lower() == 'another_instruction':
+                # some new feature
+                pass
+            else:
+                print(f"unknown instruction: {line} ")
+                exit()
+
+
+            # # TODO I NEED A MOMENT OF CLARITY TO RESOLVE THIS ISSUE IN A MORE ELAGANT FASION... 
+
+            # ###
+
+            # for opcode, obj in self.instructions.items():
+            #     if obj[0].__name__ == cmds[0]:   # search for the name of the function and if it is the same as the line being asked for add opcode. 
+            #         compiled.append(opcode) # once found, add it
+            #         # if len(cmds) >= 2: # func +  two params
+            #         if 'R' in cmds[1].upper():    # dealing with a register?
+            #             for k,v in self.register_addresses.items():
+            #                 if cmds[1].upper() == k:
+            #                     # not all register commands have two params... 
+            #                     compiled.append(int(v, 16))
+            #                     break
+                            
+            #         else:
+            #             compiled.append(int(cmds[1], 16))
                     
+            #         try:
+            #             if cmds[2][0] in ['\'', '"']: # beginning of a string
+            #                 for char in cmds[2][1:-1]:
+            #                     compiled.append(ord(char))
+            #                 compiled.append(0x00) # null byte for a string
+            #             else:
+            #                 compiled.append(int(cmds[2], 16))
+            #         except IndexError:
+            #             if self.DEBUG:
+            #                 print('index error looking for cmd[2][0] in ', cmds)
+            #         break # no need to continue this loop
+                        
+            # ###
+            # #      
 
             if self.DEBUG:
-                print([hex(x) for x in compiled])
+                print([f'0x{x:02x}' for x in compiled])
                 print('returning', compiled)
         
         return compiled
@@ -481,9 +552,9 @@ class PyVM():
             if self.DEBUG:
                 print(f'calling {op} with params {[hex(x) for x in params]}')
 
-            self.instructions[opcode][0](*params) # unpack the list as positional args
+            # TODO this might need to be refactored to come in-line with the compile ; in particular where/how register access is achieved in the compiled code. 
 
-            # self.memory['IP'] += how_many_params # this should 
+            self.instructions[opcode][0](*params) # unpack the list as positional args
 
             if self.DEBUG:
                 # self.dumpreg()
