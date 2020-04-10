@@ -1,8 +1,11 @@
+import traceback
 from typing import List, Dict
 import time
-
+import os
 from colored import fg, bg, attr
 import shlex # https://docs.python.org/3/library/shlex.html
+
+import pickledb # used for async disk based screen updates # https://pythonhosted.org/pickleDB/
 
 from .helpers import *
 
@@ -30,12 +33,16 @@ class PyVM():
 
     DEBUG = True
     DEBUG_LEVEL = 0 
+    EXPORT = True # this is related to the vm_export variable; ships info out of vm for display/analysis elsewhere. 
+    EXPORT_PATH = './vm_pickle.db'
     SPEED = 1
     memory = []
     registers = {}
-    
-    
 
+    BASE_ADDRESS = 0x1000
+    
+    
+     
  
     # REMOVE - No londer required; registers are part of the memory dict; not true... for compiling I need to be able to assign a predictable spot
     register_addresses = {
@@ -53,10 +60,10 @@ class PyVM():
         'TF': 0x6, # test flag; the result of CMP instruction is stored here. 
         'HF': 0x7, # halt flag; stop all processing. set to value > 0
 
-        'RC': 0xa, # general purpose
-        'RB': 0xb,
-        'RC': 0xc,
-        'RD': 0xd, # this is the target for the sig 13 function (print to screen)
+        'R1': 0xa, # general purpose
+        'R2': 0xb,
+        'R3': 0xc,
+        'R4': 0xd, # this is the target for the sig 13 function (print to screen)
     }
     # # bottom 16 units of memory are reserved for registers 
 
@@ -64,15 +71,20 @@ class PyVM():
     # REMOVE - No londer required; registers are part of the memory dict
 
 
-    def __init__(self, ram_size=1024, debug=True, speed=1):
+    def __init__(self, ram_size=1024, debug=True, speed=1, export_path=None):
         # This is the 'RAM' where our program will live
         self.DEBUG = debug
         self.SPEED = speed
         self.RAM_SIZE = ram_size
+        self.BASE_ADDRESS = 0x1000
         
         # def memory_init(self):
         #this needs to be a function. 
         self.memory_init(ram_size)
+        if export_path == None:
+            export_path = '../vm_pickle.db'
+        
+        self.vm_export = pickledb.load(export_path, True) # this is used to export data about the vm for some additional application to render visualizations or whatnot. may switch to redis if disk performance becomes an issue. Maybe set auto_dump to false and only run it in a batch mode at the end of a run cycle.
 
 
         # using the opcodes as the key
@@ -89,15 +101,7 @@ class PyVM():
             0x0a: (self.inc, 'where'),
             0x0b: (self.sig, 'signum'),
             0x0c: (self.lds, 'a_string'),
-            # 0x11: (self.mr1, 'what'),
-            # 0x12: (self.mr2, 'what'),
-            # 0x13: (self.mr3, 'what'),
-            # 0x14: (self.mr4, 'what'),
-            # 0x21: (self.cr1, 'what'),
-            # 0x22: (self.cr2, 'what'),
-            # 0x23: (self.cr3, 'what'),
-            # 0x24: (self.cr4, 'what'),
-            # 0x31: (self.ir1, 'by'),
+
             0x99: (self.hlt, 'nullbyte'),
 
         }
@@ -105,10 +109,6 @@ class PyVM():
 
         # memory can be a dict; keys just have to be unique. 
         # almost like accessing a list mem[0] will access the value associated with key 0
-
-        # mem['r1'] will get/set that value too. 
-
-        # you lose relative indexing and slices. e.g. mem[idx+2]
 
         # Special registers are special; They instruct the cpu on what to do or inform it of the result of the last operation
 
@@ -144,12 +144,6 @@ class PyVM():
 
         }) 
 
-        # we need to provide a way to render to the screen. 
-        # via "in
-        # I don't know how this works just yet... we'll figure it out.; It should be a list of all the supported instructions by the cpu
-
-        # all of the instructions are 2 or less parameters. . 
-
 
 
 
@@ -160,42 +154,28 @@ class PyVM():
 
         self.memory = {idx:None for idx in range(ram_size)}
 
-    # def thaw_registers(self):
-    #     # print(type(self.registers.values()))
-    #     print("thaw", self.registers.items())
-    #     for k, v in self.registers.items():
-    #         self.registers[k] = self.memory[v]
-
-    # def freeze_registers(self):
-    #     print("freeze", self.register_addresses.items())
-    #     for k, v in self.register_addresses.items():
-    #         self.memory[v] = self.registers[k]
-
-    # def modreg(self, reg, val):
-    #     target = self.register_addresses[reg]
-
-    #     self.memory[target] = val
    
     def mov(self, where, what):
         """places the value of what in memory[where]"""
         if self.DEBUG:
             print(f'mov instruction: 0x{where:04x} 0x{what:02x}')
+        where = self.mem_map(int(where))
         
-        where = int(where)
         self.memory[where] = int(what)
+        
         self.memory['IP'] += 3 
 
     def jmp(self, where):
         """ sets IP to where"""
-        where = int(where)
-        self.memory['IP'] = int(where)
+        where = self.mem_map(int(where))
+        self.memory['IP'] = where
 
     def jif(self, where):
         """jump if TF is 1"""
         if self.memory['TF'] == 1:
             if self.DEBUG:
                 print('Test Flag is set is jumping')
-            where = int(where)
+            where = int(where) + self.BASE_ADDRESS
             self.memory['IP'] = int(where)
         else:
             if self.DEBUG:
@@ -207,12 +187,16 @@ class PyVM():
         """set IP to where"""
         if self.DEBUG:
             print('Test Flag is set is jumping')
-        where = int(where)
+        where = int(where) #+ self.BASE_ADDRESS
         self.memory['IP'] = int(where)
     
 
     def cmp(self, this, that):
         """compare this to that; sets TF to 1 if they equal; something else if they aren't """
+        this = self.mem_map(this)
+        that = self.mem_map(that) 
+
+        
         if self.memory[this] == self.memory[that]:
             if self.DEBUG:
                 print(f"cmp: the are equal")
@@ -226,6 +210,9 @@ class PyVM():
 
     def inc(self, where, by):
         """INCrement the value at where by somevalue"""
+        by = int(by)
+        where = self.mem_map(int(where))
+
         if self.DEBUG:
             print(f"incrementing value at memory 0x{where:04x} by {by}; currently {self.memory[where]}")
         
@@ -238,6 +225,9 @@ class PyVM():
 
     def dec(self, where, by):
         """DECrement the value at where by some value"""
+        by = int(by)
+        where = self.mem_map(int(where))
+
         if self.DEBUG:
             print(f"decrementing value at memory 0x{where:04x} by {by}; currently {self.memory[where]}")
         
@@ -251,12 +241,13 @@ class PyVM():
 
     def mul(self, where, by):
         """multiply the value at where x by and store in where integers only please"""
+        by = int(by)
+        where = self.mem_map(int(where))
+
         if self.DEBUG:
             print(f"incrementing {where:0#x}")
         
-        by = int(by)
-        where = int(where)
-
+       
         self.memory[where] = self.memory[where] * by
 
         self.memory['IP'] += 2
@@ -265,7 +256,7 @@ class PyVM():
     def div(self, where, by):
         """div the value at where / by and store in where ; integers only please"""
         by = int(by)
-        where = int(where)
+        where = self.mem_map(int(where))
         # integer division
         self.memory[where] = self.memory[where] // by 
         self.memory['IP'] += 2
@@ -290,25 +281,46 @@ class PyVM():
      
         if signum == 0x0d: # putchar 
             # print('printing something')
+            R4_val = self.memory[0xd]
+            addr_val = self.memory[R4_val] 
+
+            addr_val = self.mem_map(int(addr_val))
+
             if self.DEBUG:
-                print(f"printing char at address in memory 0xd :{self.memory[0xd]:#04x} value: {self.memory[self.memory[0xd]]:c}", )
-            print(f'{fg("green")}{chr(self.memory[self.memory[0xd]])}{attr("reset")}', end='')
-            # with open('test_pipe', 'w') as SCREEN:
+                print(f"printing char at address in memory 0xd :{R4_val:#04x} value: {addr_val:c}", )
+
+            print(f'{fg("green")}{chr(self.memory[self.memory[0xd] + self.BASE_ADDRESS] )}{attr("reset")}', end='')
+
+            if self.EXPORT:
+                self.vm_export.set('screen_output', chr(self.memory[self.memory[0xd]+ self.BASE_ADDRESS]))
+
+            # with open('test_pipe', 'w') as SCREEN: # vm_export replaces this. 
             #     SCREEN.write(f'{fg("green")}{chr(self.memory[self.memory[0xd]])}{attr("reset")}')
+
         elif signum == 0x0e: # putstring until nullbyte; increasing
             if self.DEBUG:
-                print(f"printing string starting at address in memory 0xd :{self.memory[0xd]:#04x} value: {self.memory[self.memory[0xd]]:c}", )
-            target = self.memory[0xd]
+                print(f"printing string starting at address in memory 0xd :{self.memory[0xd]:#04x} value: {self.memory[self.memory[0xd]+ self.BASE_ADDRESS]:c}", )
+            target = self.memory[0xd] + self.BASE_ADDRESS
             while self.memory[target] != 0x00:
                 print(f'{fg("green")}{chr(self.memory[target])}{attr("reset")}', end='')
+
+                if self.EXPORT:
+                    self.vm_export.set('screen_output', chr(self.memory[self.memory[target]]))
+                
                 target += 1
+
         elif signum == 0x0f: # putstring until nullbyte; decreasing (reversed strings)
             if self.DEBUG:
                 print(f"printing string ending at address in memory 0xd:{self.memory[0xd]:#04x} value: {self.memory[self.memory[0xd]]:c}", )
-            target = self.memory[0xd]
+            target = self.memory[0xd] + self.BASE_ADDRESS
             while self.memory[target] != 0x00:
                 print(f'{fg("green")}{chr(self.memory[target])}{attr("reset")}', end='')
+
+                if self.EXPORT:
+                    self.vm_export.set('screen_output', chr(self.memory[self.memory[target]]))
+
                 target -= 1
+
         else:
             print('unhandled signum', hex(signum))
 
@@ -316,7 +328,7 @@ class PyVM():
 
     def lds(self, where, a_string):
         """put a_string at where followed by a 0x00 byte"""
-
+        # where = where + self.BASE_ADDRESS # this one doesn't need to add it because mov() is alreading adding the self.BASE_ADDRESS
         for char in a_string:
             self.mov(where, char)
             where += 1 
@@ -342,6 +354,8 @@ class PyVM():
 
         for k,v in used_mem.items():
             print(f"\taddress 0x{k:04x} : 0x{v:02x}")
+        
+        return used_mem
 
 
     def dumpmemrange(self,start=0, end=0):
@@ -358,15 +372,16 @@ class PyVM():
         regs = {k: v for k, v in self.memory.items() if isinstance(k, str)} # select all of the keys that are strings (not a memory address)
 
         for k,v in regs.items():
-            # print('\tregister',k, '=', v)
-            print(f'\tregister {k} = 0x{v:02x}')
+            print('\tregister',k, '=', v)
+            # print(f'\tregister {k} = 0x{v:02x}')
+        return regs
 
     def fetch_debug_level(self):
         try:
             dbg_level = int(open('debug_level').read())
             return dbg_level # 0 or higher
         except FileNotFoundError:
-            return 1 #no extra debugging
+            return 0 #no extra debugging
 
     def assemble(self, assembly_src):
         """this is the thing that makes the stuff"""
@@ -410,7 +425,8 @@ class PyVM():
                 if self.is_register(param_1): # leave registers unmapped
                     compiled.append(param_1)
                 else: # remap nonregister addresses
-                    compiled.append(self.mem_map(param_1))
+                    # compiled.append(self.mem_map(param_1))
+                    compiled.append(param_1) # trying to resolve who should be addressing things... I feel like it should be the run method not the assemble method... 
                 
                 compiled.append(param_2)
 
@@ -481,13 +497,26 @@ class PyVM():
         
         return compiled
 
-    def mem_map(self, requested_address, base_address=0x1000):
-        return base_address + requested_address     
+    def mem_map(self, requested_address):
+        """ applies the self.BASE_ADDRESS (default 0x1000) to a requested address as long as the requested address is not a register address
+        """
+
+        if self.is_register(requested_address) == False: # not a register address so add the offset
+            requested_address += self.BASE_ADDRESS
+        return requested_address     
 
     def is_register(self, value):
-        if value in [0xa, 0xb, 0xc, 0xd]:
+        """determines if an value is one of the register addresses"""
+        regs = [self.register_addresses[k] for k in self.registers.keys() if 'R' in k]
+        print('**'* 20)
+        print(regs)
+        if value in regs:
             return True
         return False
+
+    def regsync(self):
+        for idx, reg in enumerate(['R1', 'R2', 'R3', 'R4'], start=0xa):
+            self.memory[reg] = self.memory[idx]
 
     def run(self, compiled_code):
         """this is the thing that does the stuff"""
@@ -521,6 +550,7 @@ class PyVM():
         
 
         while self.memory.get('HF') == 0 :
+            t_start = time.time()
             self.DEBUG_LEVEL = self.fetch_debug_level()
             
             ### TODO fix this idea. there is a better way. 
@@ -547,6 +577,7 @@ class PyVM():
             if opcode == None:
                 self.memory['HF'] = 1
                 print('CRITICAL ERROR: Invalid opcode: None'   )
+                continue
 
             how_many_params = len(op) - 1
             
@@ -575,10 +606,20 @@ class PyVM():
                 if self.DEBUG_LEVEL == 1:
                     input("press enter to continue...")
                 
-                
+            self.regsync() # this is to update the GP registers with their associated memory address' value.    
             ### 
-            # time.sleep(1 * self.SPEED)
+            if self.EXPORT:
+                self.vm_export.set('registers', self.dumpreg())
+                self.vm_export.set('memory', self.dumpmem())
+                self.vm_export.dump() # see line 40 for more info
 
+            t_end = time.time()
+            t_delta = t_end - t_start
+            while t_delta < self.SPEED: # slow it down    
+                time.sleep(self.SPEED / 1000)
+                t_end = time.time()
+                t_delta = t_end - t_start
+            
 
         print("CPU Halted successfully")
         if self.DEBUG:
